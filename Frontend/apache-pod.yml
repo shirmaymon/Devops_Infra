@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vmcalc-apache-pod
+  namespace: frontend
+  labels:
+    app: vmcalc-apache
+    type: frontend
+spec:
+  containers:
+    - name: vmcalc-apache
+      image: shirmaymon/devops-front:v1
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 80
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
