@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vmcalc-pvc
+  namespace: backend
+spec:
+  accessModes:
+    - ReadWriteOnce
+  #csi-hostpath-sc - for minikube
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 1Gi
