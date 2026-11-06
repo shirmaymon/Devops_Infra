@@ -49,135 +49,34 @@ The old single-container (monolith) image is still on Docker Hub as `shirmaymon/
 
 ## Important: volumes
 
-The backend saves user files under `/web-data`, and the database keeps its data under `/var/lib/postgresql/data`. **Without a volume, both are lost when the pod is recreated.** Both Deployments mount a PVC.
+The backend saves user files under `/web-data`, and the database keeps its data under `/var/lib/postgresql/data`. Both Deployments mount a PersistentVolumeClaim at these paths, so the data is stored on the volume and not inside the container. **The data survives when a pod is deleted, restarted or recreated**: the new pod mounts the same volume and finds the data in place.
 
 The database Deployment uses `strategy: type: Recreate`: the old pod stops before the new one starts, so two PostgreSQL servers never use the same data directory.
 
-A PVC cannot be expanded here (`ALLOWVOLUMEEXPANSION` is false on the StorageClasses), so choose the size before you create it.
 
 ## The database password
 
 PostgreSQL reads `POSTGRES_PASSWORD` only on the first start, when the data directory is empty. Changing the Secret later does not change the password inside an existing database.
 
-Create the Secret by command, so the password never lands in a file:
-
-```
-kubectl create secret generic db-secret --from-literal=password=<choose-a-password> -n database
-```
-
-Or edit `Backend/DataBase/secret.yml` locally and apply it, but do not commit it with the real password.
+Set the password in `Backend/DataBase/secret.yml` (replace `CHANGE_ME`) and apply the file. Do not commit the real password to git.
 
 ## Run it on Minikube
 
-Cluster (3 nodes, Docker driver):
-
 ```
-minikube config set driver docker
 minikube start --nodes=3 --driver=docker --cpus=2 --memory=2048
-```
-
-Storage for a multi-node cluster. The default host-path provisioner does not support multi-node clusters, so enable the CSI hostpath driver (it creates the StorageClass `csi-hostpath-sc`):
-
-```
 minikube addons enable csi-hostpath-driver
-kubectl get storageclass
-```
-
-Ingress controller (NGINX):
-
-```
 minikube addons enable ingress
-kubectl get pods -n ingress-nginx
-```
-
-If the controller pod stays Pending because of the control-plane taint, remove the taint:
-
-```
-kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-
-```
-
-Namespaces:
-
-```
 kubectl apply -f namespaces.yml
-```
-
-Deploy the database first (from `Backend/DataBase`):
-
-```
-kubectl create secret generic db-secret --from-literal=password=<choose-a-password> -n database
-kubectl apply -f pvc.yml
-kubectl apply -f deployment.yml
-kubectl apply -f service.yml
-```
-
-Then the backend, then the frontend (from the repo root):
-
-```
-kubectl apply -f Backend/Flask/pvc.yml
-kubectl apply -f Backend/Flask/deployment.yml
-kubectl apply -f Backend/Flask/service.yml
-kubectl apply -f Backend/Flask/ingress.yml
-kubectl apply -f Frontend/apache-deployment.yml
-kubectl apply -f Frontend/apache-service.yml
-kubectl apply -f Frontend/apache-ingress.yml
-```
-
-Check:
-
-```
-kubectl get deployments,pods,svc,pvc -n database
-kubectl get deployments,pods,svc,pvc,ingress -n backend
-kubectl get deployments,pods,svc,ingress -n frontend
-```
-
-Check the database:
-
-```
-kubectl logs deployment/vmcalc-postgres-deployment -n database
-kubectl exec -it deployment/vmcalc-postgres-deployment -n database -- psql -U vmcalc -d vmcalc -c "\dt"
-```
-
-`\dt` should list `users`, `saved_files` and `cloud_prices`.
-
-Open the app locally (Docker driver on Windows):
-
-```
+kubectl apply -f Backend/DataBase/secret.yml
+kubectl apply -f Backend/DataBase/pvc.yml -f Backend/DataBase/deployment.yml -f Backend/DataBase/service.yml
+kubectl apply -f Backend/Flask/pvc.yml -f Backend/Flask/deployment.yml -f Backend/Flask/service.yml -f Backend/Flask/ingress.yml
+kubectl apply -f Frontend/apache-deployment.yml -f Frontend/apache-service.yml -f Frontend/apache-ingress.yml
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
 ```
 
 Then open http://localhost:8080.
 
-Switch the default namespace of `kubectl`:
-
-```
-kubectl config set-context --current --namespace=backend
-```
-
-## Build and push the images
-
-Frontend, from the `Frontend` folder:
-
-```
-docker build -t shirmaymon/devops-front:v1 .
-docker push shirmaymon/devops-front:v1
-```
-
-Backend, from the `Backend/Flask` folder:
-
-```
-docker build -t shirmaymon/devops-backend:v1 .
-docker push shirmaymon/devops-backend:v1
-```
-
-Database, from the `Backend/DataBase` folder:
-
-```
-docker build -t shirmaymon/devops-postgres-database:v1 .
-docker push shirmaymon/devops-postgres-database:v1
-```
-
-The frontend and backend Dockerfiles clone the app repo while building, and Docker caches that step. After the app repo changes, build with `--no-cache` or change `REPO_REF`. The Docker Hub repos are public, so the cluster pulls the images without credentials.
+If the ingress controller pod stays Pending, remove the control-plane taint: `kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-`
 
 ## Planned
 
