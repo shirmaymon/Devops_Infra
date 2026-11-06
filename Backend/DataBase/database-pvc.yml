@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vmcalc-postgres-pvc
+  namespace: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  #csi-hostpath-sc - for minikube
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 5Gi

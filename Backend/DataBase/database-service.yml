@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vmcalc-db-service
+  namespace: database
+spec:
+  type: ClusterIP
+  selector:
+    app: vmcalc-postgres-pod
+    type: database
+  ports:
+    - port: 5432
+      targetPort: 5432

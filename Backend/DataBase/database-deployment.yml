@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vmcalc-postgres-deployment
+  namespace: database
+  labels:
+    app: vmcalc-postgres-deployment
+    type: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vmcalc-postgres-pod
+      type: database
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: vmcalc-postgres-pod
+        type: database
+    spec:
+      containers:
+          - name: vmcalc-postgres
+            image: shirmaymon/devops-postgres-database:v1
+            imagePullPolicy: IfNotPresent
+            ports:
+              - containerPort: 5432
+            env:
+              - name: POSTGRES_USER
+                value: vmcalc
+              - name: POSTGRES_DB
+                value: vmcalc
+              - name: POSTGRES_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: db-secret
+                    key: password
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            volumeMounts:
+              - name: vmcalc-postgres-volume
+                mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: vmcalc-postgres-volume
+          persistentVolumeClaim:
+            claimName: vmcalc-postgres-pvc
