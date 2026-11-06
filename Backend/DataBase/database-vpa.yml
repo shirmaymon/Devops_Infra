@@ -1,0 +1,28 @@
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: vmcalc-postgres-vpa
+  namespace: database
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vmcalc-postgres-deployment
+  updatePolicy:
+    updateMode: "InPlaceOrRecreate"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: vmcalc-postgres
+        # minAllowed = the current requests of the Deployment
+        minAllowed:
+          cpu: 100m
+          memory: 256Mi
+        # maxAllowed: placeholder, must fit on one node
+        maxAllowed:
+          cpu: 1
+          memory: 1Gi
+        controlledResources:
+          - cpu
+          - memory
+        # VPA changes requests and scales the limits with the same ratio
+        controlledValues: RequestsAndLimits

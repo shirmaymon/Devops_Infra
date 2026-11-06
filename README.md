@@ -31,21 +31,24 @@ The old single-container (monolith) image is still on Docker Hub as `shirmaymon/
 | `Frontend/Dockerfile` | Multi-stage build of the Apache frontend image. |
 | `Frontend/apache-deployment.yml` | Deployment `vmcalc-apache-deployment` (namespace `frontend`). |
 | `Frontend/apache-service.yml` | Service `vmcalc-apache-service` (ClusterIP, port 80). |
-| `Frontend/apache-ingress.yml` | Ingress for the frontend: `/` to `vmcalc-apache-service:80`. |
+| `Frontend/frontend-ingress.yml` | Ingress for the frontend: `/` to `vmcalc-apache-service:80`. |
+| `Frontend/apache-hpa.yml` | HorizontalPodAutoscaler for Apache (1 to 3 replicas, CPU 70%, memory 80%). Not applied yet. |
 | `Frontend/apache-pod.yml` | A single test Pod. Do not apply it together with the Deployment. |
 | `Backend/Flask/Dockerfile` | Multi-stage build of the Flask backend image. |
-| `Backend/Flask/deployment.yml` | Deployment `vmcalc-flask-deployment` (namespace `backend`), mounts the volume at `/web-data`. |
-| `Backend/Flask/service.yml` | Service `vmcalc-flask-service` (ClusterIP, port 5000). |
-| `Backend/Flask/ingress.yml` | Ingress for the backend: `/api` to `vmcalc-flask-service:5000`. |
-| `Backend/Flask/pvc.yml` | PersistentVolumeClaim `vmcalc-pvc` (1Gi, StorageClass `csi-hostpath-sc`). |
-| `Backend/Flask/pod.yml` | A single test Pod. Do not apply it together with the Deployment (same labels, same volume). |
+| `Backend/Flask/flask-deployment.yml` | Deployment `vmcalc-flask-deployment` (namespace `backend`), mounts the volume at `/web-data`. |
+| `Backend/Flask/flask-service.yml` | Service `vmcalc-flask-service` (ClusterIP, port 5000). |
+| `Backend/Flask/backend-ingress.yml` | Ingress for the backend: `/api` to `vmcalc-flask-service:5000`. |
+| `Backend/Flask/flask-pvc.yml` | PersistentVolumeClaim `vmcalc-pvc` (1Gi, StorageClass `csi-hostpath-sc`). |
+| `Backend/Flask/flask-hpa.yml` | HorizontalPodAutoscaler for Flask (1 to 3 replicas, CPU 70%, memory 80%). Not applied yet. |
+| `Backend/Flask/flask-pod.yml` | A single test Pod. Do not apply it together with the Deployment (same labels, same volume). |
 | `Backend/DataBase/Dockerfile` | `postgres:17` plus `init.sql`. |
 | `Backend/DataBase/init.sql` | Draft schema: `users`, `saved_files`, `cloud_prices`. Runs once, on the first start. |
-| `Backend/DataBase/deployment.yml` | Deployment `vmcalc-postgres-deployment` (namespace `database`), strategy `Recreate`, 1 replica, data at `/var/lib/postgresql/data`. |
-| `Backend/DataBase/service.yml` | Service `vmcalc-db-service` (ClusterIP, port 5432). |
-| `Backend/DataBase/pvc.yml` | PersistentVolumeClaim `vmcalc-postgres-pvc` (1Gi, StorageClass `csi-hostpath-sc`). |
+| `Backend/DataBase/database-deployment.yml` | Deployment `vmcalc-postgres-deployment` (namespace `database`), strategy `Recreate`, 1 replica, data at `/var/lib/postgresql/data`. |
+| `Backend/DataBase/database-service.yml` | Service `vmcalc-db-service` (ClusterIP, port 5432). |
+| `Backend/DataBase/database-pvc.yml` | PersistentVolumeClaim `vmcalc-postgres-pvc` (1Gi, StorageClass `csi-hostpath-sc`). |
+| `Backend/DataBase/database-vpa.yml` | VerticalPodAutoscaler for Postgres (`InPlaceOrRecreate`, 100m/256Mi up to 1 CPU/1Gi). Not applied yet; VPA must be installed separately. |
 | `Backend/DataBase/secret.yml` | Template of the Secret `db-secret` (password is `CHANGE_ME`). Never commit the real password. |
-| `Backend/DataBase/pod.yml` | A single test Pod. Do not apply it together with the Deployment (same labels, same volume). |
+| `Backend/DataBase/database-pod.yml` | A single test Pod. Do not apply it together with the Deployment (same labels, same volume). |
 
 ## Important: volumes
 
@@ -64,19 +67,24 @@ Set the password in `Backend/DataBase/secret.yml` (replace `CHANGE_ME`) and appl
 
 ```
 minikube start --nodes=3 --driver=docker --cpus=2 --memory=2048
-minikube addons enable csi-hostpath-driver
-minikube addons enable ingress
+minikube addons enable csi-hostpath-driver; minikube addons enable ingress; minikube addons enable metrics-server
 kubectl apply -f namespaces.yml
 kubectl apply -f Backend/DataBase/secret.yml
-kubectl apply -f Backend/DataBase/pvc.yml -f Backend/DataBase/deployment.yml -f Backend/DataBase/service.yml
-kubectl apply -f Backend/Flask/pvc.yml -f Backend/Flask/deployment.yml -f Backend/Flask/service.yml -f Backend/Flask/ingress.yml
-kubectl apply -f Frontend/apache-deployment.yml -f Frontend/apache-service.yml -f Frontend/apache-ingress.yml
+kubectl apply -f Backend/DataBase/database-pvc.yml -f Backend/Flask/flask-pvc.yml
+kubectl apply -f Backend/DataBase/database-deployment.yml -f Backend/Flask/flask-deployment.yml -f Frontend/apache-deployment.yml
+kubectl apply -f Backend/DataBase/database-service.yml -f Backend/Flask/flask-service.yml -f Frontend/apache-service.yml
+kubectl apply -f Backend/Flask/backend-ingress.yml -f Frontend/frontend-ingress.yml
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
 ```
 
 Then open http://localhost:8080.
 
 If the ingress controller pod stays Pending, remove the control-plane taint: `kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-`
+
+## Scaling
+
+- **Apache and Flask:** `apache-hpa.yml` and `flask-hpa.yml` need the Metrics Server (enabled in the run block above) and CPU / memory requests on the containers. Flask cannot scale across nodes while it keeps files in a node-local volume.
+- **Postgres:** `database-vpa.yml` resizes the single pod (vertical scaling). The Vertical Pod Autoscaler is not built in and must be installed separately (see the kubernetes/autoscaler repository).
 
 ## Planned
 

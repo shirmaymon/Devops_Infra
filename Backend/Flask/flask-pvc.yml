@@ -5,7 +5,7 @@ metadata:
   namespace: backend
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   #csi-hostpath-sc - for minikube
   storageClassName: csi-hostpath-sc
   resources:
