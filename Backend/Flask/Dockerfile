@@ -13,14 +13,14 @@ RUN apt-get update \
 RUN git clone --depth 1 --branch ${REPO_REF} ${REPO_URL} /tmp/src \
  && mkdir -p /BACKEND \
  && cd /tmp/src \
- && cp --parents api.py /BACKEND/
+ && cp --parents api.py common.py /BACKEND/
 
 #Stage 2/2 - run backend on python (flask)
 FROM python:3.12-slim
 
 WORKDIR /calc/backend/flask
 
-RUN pip install --no-cache-dir flask flask-cors psycopg2-binary
+RUN pip install --no-cache-dir flask psycopg2-binary
 
 COPY --from=builder /BACKEND .
 

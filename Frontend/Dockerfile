@@ -13,7 +13,7 @@ RUN apt-get update \
 RUN git clone --depth 1 --branch ${REPO_REF} ${REPO_URL} /tmp/src \
  && mkdir -p /FRONTEND \
  && cd /tmp/src \
- && cp --parents index.html servers.html users.html machines.html calculator.html showdelete.html css/style.css js/app.js js/data.js js/saveload.js /FRONTEND/
+ && cp --parents index.html login.html servers.html users.html machines.html calculator.html showdelete.html css/style.css js/app.js js/auth.js js/data.js js/saveload.js /FRONTEND/
 
 #Stage 2/2 - run frontend on apache2
 FROM httpd:2.4

@@ -8,6 +8,13 @@ spec:
   rules:
     - http:
         paths:
+          - path: /api/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: vmcalc-auth-service
+                port:
+                  number: 5001
           - path: /api
             pathType: Prefix
             backend:
