@@ -3,6 +3,7 @@
 
 -- Users: local accounts and Google accounts. A Google login and a local account
 -- with the same email are one user, so the email is unique.
+-- (Used by the auth service, which is not built yet.)
 CREATE TABLE users (
     id            SERIAL PRIMARY KEY,
     email         TEXT UNIQUE NOT NULL,
@@ -12,17 +13,21 @@ CREATE TABLE users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Saved files: the content stays on disk, the database keeps the owner and the path.
--- The limit of 5 files per user is checked by the application.
+-- Saved files: the content is stored in the database as JSON.
+-- For now the owner is identified by first and last name (lowercase), as in the current app.
+-- When the auth service exists, the owner becomes a user_id that references users(id).
+-- The limit of 5 files per owner is checked by the application.
 CREATE TABLE saved_files (
     id         SERIAL PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name       TEXT NOT NULL,
-    path       TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    first_name TEXT NOT NULL,
+    last_name  TEXT NOT NULL,
+    filename   TEXT NOT NULL,           -- <first>_<last>_DD-MM-YYYY_HH-MM.json
+    data       JSONB NOT NULL,          -- the saved hosts, users and machines
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (first_name, last_name, filename)
 );
 
-CREATE INDEX saved_files_user_idx ON saved_files (user_id);
+CREATE INDEX saved_files_owner_idx ON saved_files (first_name, last_name, created_at);
 
 -- Cloud VM prices, pulled from the clouds once a day, with the time of the pull.
 CREATE TABLE cloud_prices (

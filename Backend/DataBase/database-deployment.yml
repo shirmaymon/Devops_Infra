@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
           - name: vmcalc-postgres
-            image: shirmaymon/devops-postgres-database:v1
+            image: shirmaymon/devops-postgres-database:v2
             imagePullPolicy: IfNotPresent
             ports:
               - containerPort: 5432
