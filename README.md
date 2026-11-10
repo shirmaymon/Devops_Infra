@@ -1,114 +1,175 @@
 # Devops_Infra
 
-Infrastructure repo for the VM Calculator Dashboard (DevOps course final project).
+Dockerfiles and Kubernetes files of the VM Calculator Dashboard (DevOps course final project).
+App code: https://github.com/shirmaymon/Devops_ProjectWeb
 
-- Application repo (code): https://github.com/shirmaymon/Devops_ProjectWeb
-- This repo: Dockerfiles and Kubernetes configuration files.
+## Architecture
 
-## Current state
+NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. Both backend services use the same PostgreSQL database.
 
-The app is split into a **frontend**, a **backend** (Flask API and auth service) and a **database**, each with its own image, Deployment and Service. An NGINX Ingress routes `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. The calculation itself still runs in the user's browser.
-
-| Part | Image | Namespace | What it runs |
-| --- | --- | --- | --- |
-| Frontend | `shirmaymon/devops-front:v2` | `frontend` | Apache (`httpd:2.4`) serving the static pages. |
-| Backend (Flask) | `shirmaymon/devops-backend:v4` | `backend` | `api.py` (Flask, port 5000): Save / Load routes for a logged-in user. Saved files are stored in PostgreSQL. |
-| Auth service | `shirmaymon/devops-auth:v1` | `backend` | `auth.py` (Flask, port 5001): register, login, logout, who-am-I. Sessions are stored in PostgreSQL. |
-| Database | `shirmaymon/devops-postgres-database:v3` | `database` | PostgreSQL 17 (port 5432). Tables are created from `init.sql` on the first start. |
-
-The frontend, backend and auth Dockerfiles are multi-stage builds. Stage 1 (`ubuntu:24.04`) clones the app repo with git (`REPO_URL`, `REPO_REF` build args) and copies only the needed files. The final stage (`httpd:2.4` for the frontend, `python:3.12-slim` for the backend) contains only those files, without git.
-
-The database image is `postgres:17` plus `init.sql`, copied to `/docker-entrypoint-initdb.d/`. The scripts in that folder run only on the first start, when the data directory is empty. On later starts PostgreSQL finds the existing data and skips initialization (verified on the cluster: data survived deleting the pod).
-
-### Saved files
-
-The backend saves each user's data in the table `saved_files`, as JSON (`JSONB`). The owner is the logged-in user (`user_id`). Every save gets its own ID, which is part of the filename (`<name>_<DD-MM-YYYY>_<HH-MM>_<id>.json`), and each user can keep up to 5 saves. When the limit is reached, the user must delete one (the oldest is offered) before saving a new one.
-
-The Flask API and the auth service read the database settings from environment variables: `DB_HOST` (`vmcalc-db-service.database`), `DB_NAME`, `DB_USER` and `DB_PASSWORD` (from the Secret `db-secret`).
-
-### Login
-
-Local accounts (email + password, hashed with Argon2id) are handled by the auth service. After login the browser holds a random session ID in an `HttpOnly`, `SameSite=Strict` cookie. The session record is in the table `sessions` of PostgreSQL, so every pod of both services can check it and logout works at once. Requests that change data also send a CSRF token. Settings of both services (environment variables): `COOKIE_SECURE` (`false` while the site runs over HTTP, `true` once HTTPS is on), `SESSION_IDLE_MINUTES` (30) and `SESSION_ABSOLUTE_HOURS` (8). Not built yet: Sign in with Google.
-
-The old single-container (monolith) image is still on Docker Hub as `shirmaymon/devopsweb:v1`. Its Dockerfile and manifests are no longer in this repo; they are in the git history.
+| Part | Image | Namespace |
+| --- | --- | --- |
+| Frontend (Apache) | `shirmaymon/devops-front:v2` | `frontend` |
+| Flask API (save / load) | `shirmaymon/devops-backend:v4` | `backend` |
+| Auth service (register, login, logout) | `shirmaymon/devops-auth:v1` | `backend` |
+| PostgreSQL 17 | `shirmaymon/devops-postgres-database:v3` | `database` |
 
 ## Repo structure
 
 | Path | What it is |
 | --- | --- |
-| `namespaces.yml` | The namespaces: `frontend`, `backend`, `database`, `monitoring`, `jenkins`. |
-| `Frontend/Dockerfile` | Multi-stage build of the Apache frontend image (the pages, `login.html` and the scripts). |
-| `Frontend/apache-deployment.yml` | Deployment `vmcalc-apache-deployment` (namespace `frontend`). |
-| `Frontend/apache-service.yml` | Service `vmcalc-apache-service` (ClusterIP, port 80). |
-| `Frontend/frontend-ingress.yml` | Ingress for the frontend: `/` to `vmcalc-apache-service:80`. |
-| `Frontend/apache-hpa.yml` | HorizontalPodAutoscaler for Apache (1 to 3 replicas, CPU 70%, memory 80%). Not applied yet. |
-| `Backend/Flask/Dockerfile` | Multi-stage build of the Flask backend image (installs Flask and psycopg2; copies `api.py` and `common.py`). |
-| `Backend/Flask/flask-deployment.yml` | Deployment `vmcalc-flask-deployment` (namespace `backend`), database settings from environment variables, no volume. |
-| `Backend/Flask/flask-service.yml` | Service `vmcalc-flask-service` (ClusterIP, port 5000). |
-| `Backend/Flask/backend-ingress.yml` | Ingress for the backend: `/api/auth` to `vmcalc-auth-service:5001`, and `/api` to `vmcalc-flask-service:5000`. |
-| `Backend/Flask/secret.yml` | Template of the Secret `db-secret` in the `backend` namespace (password is `CHANGE_ME`). Never commit the real password. |
-| `Backend/Flask/flask-hpa.yml` | HorizontalPodAutoscaler for Flask (1 to 3 replicas, CPU 70%, memory 80%). Not applied yet. |
-| `Backend/Auth/Dockerfile` | Multi-stage build of the auth service image (installs Flask, psycopg2 and argon2-cffi; copies `auth.py` and `common.py`). |
-| `Backend/Auth/auth-deployment.yml` | Deployment `vmcalc-auth-deployment` (namespace `backend`), database settings and cookie settings from environment variables. |
-| `Backend/Auth/auth-service.yml` | Service `vmcalc-auth-service` (ClusterIP, port 5001). |
-| `Backend/DataBase/Dockerfile` | `postgres:17` plus `init.sql`. |
-| `Backend/DataBase/init.sql` | Schema: `users`, `saved_files`, `sessions`, `cloud_prices`. Runs once, on the first start. |
-| `Backend/DataBase/database-deployment.yml` | Deployment `vmcalc-postgres-deployment` (namespace `database`), strategy `Recreate`, 1 replica, data at `/var/lib/postgresql/data`. |
-| `Backend/DataBase/database-service.yml` | Service `vmcalc-db-service` (ClusterIP, port 5432). |
-| `Backend/DataBase/database-pvc.yml` | PersistentVolumeClaim `vmcalc-postgres-pvc` (1Gi, StorageClass `csi-hostpath-sc`). |
-| `Backend/DataBase/database-vpa.yml` | VerticalPodAutoscaler for Postgres (`InPlaceOrRecreate`, 100m/256Mi up to 1 CPU/1Gi). Not applied yet; VPA must be installed separately. |
-| `Backend/DataBase/secret.yml` | Template of the Secret `db-secret` in the `database` namespace (password is `CHANGE_ME`). Never commit the real password. |
-| `DEPRECATED/` | Files that are no longer used: the single test Pods (apache, flask, database, auth) and the old Flask PVC. Do not apply them. |
+| `namespaces.yml` | All namespaces: `frontend`, `backend`, `database`, `monitoring`, `jenkins`, `argo`. |
+| `Frontend/` | Dockerfile, Deployment, Service, Ingress, HPA (not applied). |
+| `Backend/Flask/` | Dockerfile, Deployment, Service, HPA (not applied), `secret.yml`. |
+| `Backend/Auth/` | Dockerfile, Deployment, Service. |
+| `Backend/backend-ingress.yml` | Ingress for `/api/auth` and `/api`. |
+| `Backend/DataBase/` | Dockerfile, `init.sql`, Deployment, Service, PVC, VPA (not applied), `secret.yml`. |
+| `CICD/Argo/` | Argo CD Helm values and the Argo CD Application. |
+| `CICD/Jenkins/` | Jenkins Helm values and the admin Secret template. |
+| `DEPRECATED/` | Old single-pod files. Do not apply. |
 
-## Important: volumes
+The `secret.yml` files hold `CHANGE_ME` as the password. Never commit a real password.
 
-The database keeps its data under `/var/lib/postgresql/data`, on a PersistentVolumeClaim. **The data survives when the pod is deleted, restarted or recreated**: the new pod mounts the same volume and finds the data in place.
+## Run on Minikube
 
-The backend and the auth service have no volume: the saved files and the sessions are stored in the database, so their pods keep no data.
+Run from the repo folder. Windows: PowerShell. Mac: Terminal. Docker Desktop must be running.
 
-The database Deployment uses `strategy: type: Recreate`: the old pod stops before the new one starts, so two PostgreSQL servers never use the same data directory.
-
-## The database password
-
-PostgreSQL reads `POSTGRES_PASSWORD` only on the first start, when the data directory is empty. Changing the Secret later does not change the password inside an existing database.
-
-A pod can only use a Secret from its own namespace, so the password is kept in two Secrets with the same name and password (the auth service runs in `backend` and uses the same copy as Flask): `Backend/DataBase/secret.yml` (namespace `database`) and `Backend/Flask/secret.yml` (namespace `backend`). Set the password in both (replace `CHANGE_ME`) and apply them. Do not commit the real password to git.
-
-## Changing the database schema
-
-`init.sql` runs only on an empty data directory. To apply a changed `init.sql`: build and push a new database image tag, set it in `database-deployment.yml`, delete the Deployment and the PVC (`kubectl delete deployment vmcalc-postgres-deployment -n database`, then `kubectl delete pvc vmcalc-postgres-pvc -n database`), and apply the PVC, Deployment and Service again. This deletes all stored data.
-
-## Run it on Minikube
-
-PowerShell:
+### 1. Start Minikube
 
 ```
-minikube start --nodes=3 --driver=docker --cpus=2 --memory=2048
-minikube addons enable csi-hostpath-driver; minikube addons enable ingress; minikube addons enable metrics-server
-kubectl apply -f namespaces.yml -f Backend/DataBase/secret.yml -f Backend/Flask/secret.yml -f Backend/DataBase/database-pvc.yml
-Get-ChildItem -Path Backend,Frontend -Recurse -Include *-deployment.yml,*-service.yml,*-ingress.yml | ForEach-Object { kubectl apply -f $_.FullName }
+minikube delete
+minikube start --nodes=3 --driver=docker --cpus=2 --memory=4096
+kubectl get nodes
+```
+
+`minikube delete` removes the old cluster and all its data. Skip it on a first run.
+
+### 2. Enable the addons
+
+```
+minikube addons enable csi-hostpath-driver
+minikube addons enable ingress
+minikube addons enable metrics-server
+kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
+```
+
+If the controller stays `Pending`: `kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-`
+
+### 3. Run the app
+
+Namespaces and the database password (same password in both Secrets):
+
+Windows PowerShell:
+
+```
+kubectl apply -f namespaces.yml
+$pw = "ChooseYourPassword1"
+(Get-Content Backend/DataBase/secret.yml -Raw) -replace 'CHANGE_ME', $pw | kubectl apply -f -
+(Get-Content Backend/Flask/secret.yml -Raw) -replace 'CHANGE_ME', $pw | kubectl apply -f -
+```
+
+Mac:
+
+```
+kubectl apply -f namespaces.yml
+pw="ChooseYourPassword1"
+sed "s/CHANGE_ME/$pw/g" Backend/DataBase/secret.yml | kubectl apply -f -
+sed "s/CHANGE_ME/$pw/g" Backend/Flask/secret.yml | kubectl apply -f -
+```
+
+Database, backend, frontend, Ingress (same on both):
+
+```
+kubectl apply -f Backend/DataBase/database-pvc.yml -f Backend/DataBase/database-deployment.yml -f Backend/DataBase/database-service.yml
+kubectl rollout status deployment/vmcalc-postgres-deployment -n database
+
+kubectl apply -f Backend/Flask/flask-deployment.yml -f Backend/Flask/flask-service.yml
+kubectl apply -f Backend/Auth/auth-deployment.yml -f Backend/Auth/auth-service.yml
+kubectl apply -f Frontend/apache-deployment.yml -f Frontend/apache-service.yml
+kubectl wait --for=condition=available deployment --all -n backend --timeout=180s
+kubectl wait --for=condition=available deployment --all -n frontend --timeout=180s
+
+kubectl apply -f Backend/backend-ingress.yml -f Frontend/frontend-ingress.yml
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
 ```
 
-Then open http://localhost:8080.
+The password: letters and digits, at least one letter. Leave the port-forward running, then open http://localhost:8080 (register, save, load, delete, log out). After a frontend update, hard-refresh the browser (Ctrl+Shift+R).
 
-If the ingress controller pod stays Pending, remove the control-plane taint: `kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-`
-
-See the saved files in the database:
+Optional checks:
 
 ```
-kubectl exec -it deployment/vmcalc-postgres-deployment -n database -- psql -U vmcalc -d vmcalc -c "SELECT id, first_name, last_name, filename, created_at FROM saved_files ORDER BY created_at;"
+kubectl get pods -A
+kubectl exec deployment/vmcalc-postgres-deployment -n database -- psql -U vmcalc -d vmcalc -c "\dt"
+curl.exe -i http://localhost:8080/api/auth/me
 ```
 
-## Scaling
+On a Mac use `curl` instead of `curl.exe`.
 
-- **Apache and Flask:** `apache-hpa.yml` and `flask-hpa.yml` need the Metrics Server (enabled in the run block above) and CPU / memory requests on the containers. The backend keeps no data in the pod, so it can run more than one replica.
-- **Postgres:** `database-vpa.yml` resizes the single pod (vertical scaling). The Vertical Pod Autoscaler is not built in and must be installed separately (see the kubernetes/autoscaler repository).
+The tables are `cloud_prices`, `saved_files`, `sessions`, `users`. The `curl` must answer `401` (not logged in).
 
-## Test the login
+Stop and start later (keeps the data): `minikube stop`, then `minikube start`, then the port-forward.
 
-Open http://localhost:8080 and check: Save without a login goes to the login page; after creating an account, Save, Load, Delete and Log out work. If the old page behaviour appears after a frontend update, hard-refresh the browser (Ctrl+Shift+R): it may be using a cached `saveload.js`.
+## Notes
+
+- The database keeps its data on a PVC, so it survives pod restarts. `init.sql` runs only on an empty data directory; to change the schema, build a new database image tag, delete the database Deployment and PVC, and apply them again.
+- Both Secrets `db-secret` (in `database` and `backend`) must have the same password.
+
+## Argo CD and Jenkins (installed with Helm)
+
+Install (the Jenkins Secret line differs by system):
+
+```
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo add jenkins https://charts.jenkins.io
+helm repo update
+helm install argocd argo/argo-cd -n argo --version 10.4.0 -f CICD/Argo/argocd-values.yml
+kubectl apply -f CICD/Argo/application.yml
+```
+
+Jenkins admin Secret, Windows PowerShell:
+
+```
+(Get-Content CICD/Jenkins/secret.yml -Raw) -replace 'CHANGE_ME', 'ChooseYourPassword2' | kubectl apply -f -
+```
+
+Mac:
+
+```
+sed "s/CHANGE_ME/ChooseYourPassword2/g" CICD/Jenkins/secret.yml | kubectl apply -f -
+```
+
+Then:
+
+```
+helm install jenkins jenkins/jenkins -n jenkins --version 5.9.63 -f CICD/Jenkins/jenkins-values.yml
+```
+
+Open Argo CD and Jenkins. Each port-forward keeps running, so use a separate window for each:
+
+```
+kubectl port-forward svc/argocd-server -n argo 8081:443
+```
+
+```
+kubectl port-forward svc/jenkins -n jenkins 8082:8080
+```
+
+Argo CD admin password, Windows PowerShell:
+
+```
+kubectl -n argo get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) }
+```
+
+Mac:
+
+```
+kubectl -n argo get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+Argo CD: https://localhost:8081, user `admin`. Jenkins: http://localhost:8082, user `admin`.
+
+The Argo CD Application follows this repo. It does not sync `namespaces.yml`, the Secrets, the HPA / VPA files, `CICD/` and `DEPRECATED/`. It has the Argo CD finalizer: deleting it (`kubectl delete -f CICD/Argo/application.yml`) also deletes everything it deployed, including the database PVC.
 
 ## Planned
 
-In this order: Argo CD and Jenkins (CI/CD), a change in the app to verify the pipeline, Prometheus and Grafana, a health check of the whole app. If there is time: move to AWS with HTTPS (`COOKIE_SECURE=true`), then Google sign-in. Also listed: Helm, Terraform and logging.
+Jenkins pipeline, Prometheus and Grafana, then AWS with HTTPS and Google sign-in.

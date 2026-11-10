@@ -1,0 +1,54 @@
+# Settings for the Argo CD Helm chart (argo/argo-cd).
+# Install: see "Argo CD and Jenkins" in the README.
+
+# Dex is the optional "log in with Google / GitHub" part of Argo CD. We log in with the
+# local admin user, so we turn it off to save memory.
+dex:
+  enabled: false
+
+# Small CPU / memory requests so everything fits on the 2 GB Minikube nodes.
+
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+applicationSet:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

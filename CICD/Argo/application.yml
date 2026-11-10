@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vmcalc
+  namespace: argo
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io   # deleting the Application also deletes what it deployed
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/shirmaymon/Devops_Infra.git
+    targetRevision: HEAD
+    path: .                               # the whole repo is a folder of plain manifests
+    directory:
+      recurse: true
+      exclude: '{namespaces.yml,Backend/DataBase/secret.yml,Backend/Flask/secret.yml,Backend/DataBase/database-vpa.yml,Backend/Flask/flask-hpa.yml,Frontend/apache-hpa.yml,CICD/**,DEPRECATED/**}'
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      selfHeal: true                      # undo manual changes made with kubectl
+      prune: false                        # do NOT delete things that disappear from Git (protects the database PVC)

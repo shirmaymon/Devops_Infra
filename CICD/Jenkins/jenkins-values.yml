@@ -1,0 +1,39 @@
+# Settings for the Jenkins Helm chart (jenkins/jenkins).
+# Install: see "Argo CD and Jenkins" in the README.
+
+controller:
+  admin:
+    createSecret: false
+    existingSecret: jenkins-admin
+
+  # Reach Jenkins with kubectl port-forward.
+  serviceType: ClusterIP
+
+  # The controller only schedules jobs. Builds run in temporary agent pods (agent.enabled below).
+  numExecutors: 0
+
+  # Plugins on top of the chart's default list (kubernetes, workflow-aggregator, git, configuration-as-code). No version = the latest one is installed when Jenkins starts.
+  additionalPlugins:
+    - github
+    - ssh-agent
+    - pipeline-stage-view
+    - junit
+
+  # custom values (chart default: request 50m / 256Mi, limit 2 CPU / 4 GiB),
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+
+# csi-hostpath-sc for minikube, to save jobs, credentials, build history . It lives on one node, so the Jenkins pod will always start on that node.
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: csi-hostpath-sc
+
+# Run each build in its own temporary pod (Kubernetes plugin). This is the chart default .
+agent:
+  enabled: true
