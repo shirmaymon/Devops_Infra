@@ -26,6 +26,8 @@ NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/a
 | `Backend/DataBase/` | Dockerfile, `init.sql`, Deployment, Service, PVC, VPA (not applied), `secret.yml`. |
 | `CICD/Argo/` | Argo CD Helm values and the Argo CD Application. |
 | `CICD/Jenkins/` | Jenkins Helm values and the admin Secret template. |
+| `Monitoring/Prometheus/` | Helm values of `kube-prometheus-stack` (Prometheus, Grafana, Prometheus Operator). |
+| `Monitoring/Grafana/` | Grafana admin Secret template (`CHANGE_ME`). |
 | `DEPRECATED/` | Old single-pod files. Do not apply. |
 
 The `secret.yml` files hold `CHANGE_ME` as the password. Never commit a real password.
@@ -119,6 +121,7 @@ Stop and start later (keeps the data): `minikube stop`, then `minikube start`, t
 Install (the Jenkins Secret line differs by system):
 
 ```
+kubectl apply -f namespaces.yml
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo add jenkins https://charts.jenkins.io
 helm repo update
@@ -170,6 +173,42 @@ Argo CD: https://localhost:8081, user `admin`. Jenkins: http://localhost:8082, u
 
 The Argo CD Application follows this repo. It does not sync `namespaces.yml`, the Secrets, the HPA / VPA files, `CICD/` and `DEPRECATED/`. It has the Argo CD finalizer: deleting it (`kubectl delete -f CICD/Argo/application.yml`) also deletes everything it deployed, including the database PVC.
 
+## Prometheus and Grafana (installed with Helm)
+
+`kube-prometheus-stack` in the `monitoring` namespace. Grafana admin Secret, Windows PowerShell:
+
+```
+(Get-Content Monitoring/Grafana/secret.yml -Raw) -replace 'CHANGE_ME', 'ChooseYourPassword3' | kubectl apply -f -
+```
+
+Mac:
+
+```
+sed "s/CHANGE_ME/ChooseYourPassword3/g" Monitoring/Grafana/secret.yml | kubectl apply -f -
+```
+
+Install and wait until all pods are `Running`:
+
+```
+helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack --version 88.6.2 -n monitoring -f Monitoring/Prometheus/kube-prometheus-stack-values.yml
+kubectl get pods -n monitoring -w
+```
+
+Open Grafana and Prometheus. Each port-forward keeps running, so use a separate window for each:
+
+```
+kubectl get svc -n monitoring
+kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
+```
+
+```
+kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090
+```
+
+Grafana: http://localhost:3000, user `admin`, password as chosen in the Secret. Prometheus: http://localhost:9090.
+
+Notes: Alertmanager is off, Prometheus keeps 2 days of metrics and has no volume , and the Minikube control-plane scrape targets are off. The Argo CD Application does not sync `Monitoring/Grafana/secret.yml` and the Helm values file.
+
 ## Planned
 
-Jenkins pipeline, Prometheus and Grafana, then AWS with HTTPS and Google sign-in.
+Jenkins pipeline, application metrics (`/metrics` and ServiceMonitors), then AWS with HTTPS and Google sign-in.

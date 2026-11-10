@@ -1,0 +1,43 @@
+# Settings for the kube-prometheus-stack Helm chart (Prometheus + Grafana + the Prometheus Operator).
+# Install: see "Prometheus and Grafana" in the README.
+
+alertmanager:
+  enabled: false
+
+# Minikube does not expose the control-plane metrics ports to Prometheus
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+# The Grafana admin login comes from a Secret
+grafana:
+  admin:
+    existingSecret: grafana-admin
+
+prometheus:
+  prometheusSpec:
+    # Find every ServiceMonitor / PodMonitor in the cluster, not only the ones labelled with this Helm release.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    # Keep the metrics for 2 days (on mokinube no volume, metrics saved on pod).
+    retention: 2d
+    # custom values
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
