@@ -1,0 +1,38 @@
+# Network rules for the frontend namespace.
+# NetworkPolicy is only enforced when the cluster has a network plugin that supports it (Calico, see README).
+
+# 1) Deny all traffic to and from every Pod in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: frontend
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2) Allow the NGINX ingress controller to reach Apache on port 80. Nothing else can.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-ingress-controller
+  namespace: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: vmcalc-apache-pod
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: controller
+      ports:
+        - protocol: TCP
+          port: 80

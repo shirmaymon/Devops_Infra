@@ -1,0 +1,36 @@
+
+# 1) Deny all traffic to and from every Pod in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: database
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2) Only the backend Pods (Flask API and auth service) can reach PostgreSQL, on port 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-backend
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      app: vmcalc-postgres-pod
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: backend
+          podSelector:
+            matchLabels:
+              type: backend
+      ports:
+        - protocol: TCP
+          port: 5432

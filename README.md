@@ -5,7 +5,7 @@ App code: https://github.com/shirmaymon/Devops_ProjectWeb
 
 ## Architecture
 
-NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. Both backend services use the same PostgreSQL database.
+NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. Both backend services use the same PostgreSQL database. Network rules (NetworkPolicy, enforced by Calico) allow only this traffic: Ingress to the frontend and backend, and backend to the database.
 
 | Part | Image | Namespace |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/a
 | `Backend/DataBase/` | Dockerfile, `init.sql`, Deployment, Service, PVC, VPA (not applied), `secret.yml`. |
 | `CICD/Argo/` | Argo CD Helm values and the Argo CD Application. |
 | `CICD/Jenkins/` | Jenkins Helm values and the admin Secret template. |
+| `Security/NetworkPolicy/` | Network rules: deny all, then allow only what the app needs (one file per namespace). |
 | `Monitoring/Prometheus/` | Helm values of `kube-prometheus-stack` (Prometheus, Grafana, Prometheus Operator). |
 | `Monitoring/Grafana/` | Grafana admin Secret template (`CHANGE_ME`). |
 | `DEPRECATED/` | Old single-pod files. Do not apply. |
@@ -40,11 +41,12 @@ Run from the repo folder. Windows: PowerShell. Mac: Terminal. Docker Desktop mus
 
 ```
 minikube delete
-minikube start --nodes=3 --driver=docker --cpus=2 --memory=4096
+minikube start --nodes=3 --driver=docker --cni=calico --cpus=2 --memory=4096
 kubectl get nodes
+kubectl get pods -n kube-system
 ```
 
-`minikube delete` removes the old cluster and all its data. Skip it on a first run.
+The `calico-node` Pods (one per node) and `calico-kube-controllers` must be `Running`.
 
 ### 2. Enable the addons
 
@@ -79,7 +81,7 @@ sed "s/CHANGE_ME/$pw/g" Backend/DataBase/secret.yml | kubectl apply -f -
 sed "s/CHANGE_ME/$pw/g" Backend/Flask/secret.yml | kubectl apply -f -
 ```
 
-Database, backend, frontend, Ingress (same on both):
+Database, backend, frontend, network rules, Ingress (same on both):
 
 ```
 kubectl apply -f Backend/DataBase/database-pvc.yml -f Backend/DataBase/database-deployment.yml -f Backend/DataBase/database-service.yml
@@ -90,6 +92,8 @@ kubectl apply -f Backend/Auth/auth-deployment.yml -f Backend/Auth/auth-service.y
 kubectl apply -f Frontend/apache-deployment.yml -f Frontend/apache-service.yml
 kubectl wait --for=condition=available deployment --all -n backend --timeout=180s
 kubectl wait --for=condition=available deployment --all -n frontend --timeout=180s
+
+kubectl apply -f Security/NetworkPolicy/
 
 kubectl apply -f Backend/backend-ingress.yml -f Frontend/frontend-ingress.yml
 kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 8080:80
@@ -121,7 +125,6 @@ Stop and start later (keeps the data): `minikube stop`, then `minikube start`, t
 Install (the Jenkins Secret line differs by system):
 
 ```
-kubectl apply -f namespaces.yml
 helm repo add argo https://argoproj.github.io/argo-helm
 helm repo add jenkins https://charts.jenkins.io
 helm repo update
@@ -207,7 +210,7 @@ kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:909
 
 Grafana: http://localhost:3000, user `admin`, password as chosen in the Secret. Prometheus: http://localhost:9090.
 
-Notes: Alertmanager is off, Prometheus keeps 2 days of metrics and has no volume , and the Minikube control-plane scrape targets are off. The Argo CD Application does not sync `Monitoring/Grafana/secret.yml` and the Helm values file.
+Notes: Alertmanager is off, Prometheus keeps 2 days of metrics and has no volume (metrics are lost if its pod restarts), and the Minikube control-plane scrape targets are off. The Argo CD Application does not sync `Monitoring/Grafana/secret.yml` and the Helm values file.
 
 ## Planned
 
