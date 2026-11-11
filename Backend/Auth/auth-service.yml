@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: vmcalc-auth-service
   namespace: backend
+  labels:
+    app: vmcalc-auth
 spec:
   type: ClusterIP
   selector:
     app: vmcalc-auth-pod
     type: backend
   ports:
-    - port: 5001
+    - name: http
+      port: 5001
       targetPort: 5001

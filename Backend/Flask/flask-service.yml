@@ -3,11 +3,14 @@ kind: Service
 metadata:
   name: vmcalc-flask-service
   namespace: backend
+  labels:
+    app: vmcalc-flask
 spec:
   type: ClusterIP
   selector:
     app: vmcalc-flask-pod
     type: backend
   ports:
-    - port: 5000
+    - name: http
+      port: 5000
       targetPort: 5000

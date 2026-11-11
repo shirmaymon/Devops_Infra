@@ -86,7 +86,9 @@ kubectl apply -f CICD/Argo/application.yml
 helm install jenkins jenkins/jenkins -n jenkins --version 5.9.63 -f CICD/Jenkins/jenkins-values.yml
 
 (Get-Content Monitoring/Grafana/secret.yml -Raw) -replace 'CHANGE_ME', 'ChooseYourPassword3' | kubectl apply -f -
+
 helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack --version 88.6.2 -n monitoring -f Monitoring/Prometheus/kube-prometheus-stack-values.yml
+
 kubectl get pods -n monitoring -w
 ```
 
