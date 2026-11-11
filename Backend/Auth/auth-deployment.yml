@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: vmcalc-auth
-          image: shirmaymon/devops-auth:v1
+          image: shirmaymon/devops-auth:c0c60a5
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
