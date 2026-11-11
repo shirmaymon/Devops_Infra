@@ -18,6 +18,7 @@ controller:
     - ssh-agent
     - pipeline-stage-view
     - junit
+    - pipeline-graph-view
 
   # custom values (chart default: request 50m / 256Mi, limit 2 CPU / 4 GiB),
   resources:
