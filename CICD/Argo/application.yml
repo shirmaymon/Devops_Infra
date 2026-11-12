@@ -3,8 +3,7 @@ kind: Application
 metadata:
   name: vmcalc
   namespace: argo
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io   # deleting the Application also deletes what it deployed
+
 spec:
   project: default
   source:
@@ -13,7 +12,7 @@ spec:
     path: .                               # the whole repo is a folder of plain manifests
     directory:
       recurse: true
-      exclude: '{namespaces.yml,Backend/DataBase/secret.yml,Backend/Flask/secret.yml,Backend/DataBase/database-vpa.yml,Backend/Flask/flask-hpa.yml,Frontend/apache-hpa.yml,CICD/**,DEPRECATED/**,Monitoring/Grafana/secret.yml,Monitoring/Prometheus/kube-prometheus-stack-values.yml}'
+      exclude: '{namespaces.yml,Backend/DataBase/secret.yml,Backend/Flask/secret.yml,Backend/DataBase/database-vpa.yml,CICD/**,DEPRECATED/**,Monitoring/Grafana/**,Monitoring/Prometheus/kube-prometheus-stack-values.yml}'
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

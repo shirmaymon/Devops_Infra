@@ -5,7 +5,7 @@ App code and Dockerfiles: https://github.com/shirmaymon/Devops_ProjectWeb
 
 ## Architecture
 
-NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. Both backends use the same PostgreSQL database. Network rules (Calico) allow only: Ingress to the frontend and backend, and backend to the database. Jenkins builds the images from the app repo and writes the new tags into the Deployment files here; Argo CD deploys them.
+NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/api` to the Flask API. Both backends use the same PostgreSQL database. Network rules (Calico) allow only: Ingress to the frontend and backend, backend to the database, and Prometheus to the backend. Jenkins builds the images from the app repo, tests the changed services in parallel and writes the new tags into the Deployment files here; Argo CD deploys them. Prometheus and Grafana show cluster and app metrics.
 
 | Part | Image | Namespace |
 | --- | --- | --- |
@@ -20,12 +20,12 @@ NGINX Ingress sends `/` to the frontend, `/api/auth` to the auth service and `/a
 | --- | --- |
 | `namespaces.yml` | All namespaces. |
 | `Frontend/` | Deployment, Service, Ingress, HPA (not applied). |
-| `Backend/Flask/`, `Backend/Auth/` | Deployment, Service (Flask also `secret.yml`, HPA not applied). |
+| `Backend/Flask/`, `Backend/Auth/` | Deployment (with probes), Service, ServiceMonitor (Flask also `secret.yml`, HPA not applied). |
 | `Backend/DataBase/` | Dockerfile, `init.sql`, Deployment, Service, PVC, `secret.yml`. |
 | `Backend/backend-ingress.yml` | Ingress for `/api/auth` and `/api`. |
 | `Security/NetworkPolicy/` | Network rules, one file per namespace. |
 | `CICD/Argo/`, `CICD/Jenkins/` | Helm values, Argo CD Application, Jenkins admin Secret. |
-| `Monitoring/` | Helm values of `kube-prometheus-stack`, Grafana admin Secret. |
+| `Monitoring/` | Helm values of `kube-prometheus-stack`, Grafana admin Secret and dashboards (JSON, in `Grafana/`). |
 | `DEPRECATED/` | Old files. Do not apply. |
 
 The `secret.yml` files hold `CHANGE_ME` as the password. Never commit a real password.
@@ -92,6 +92,12 @@ helm install kube-prometheus-stack oci://ghcr.io/prometheus-community/charts/kub
 kubectl get pods -n monitoring -w
 ```
 
+The ServiceMonitor type exists only after the stack is installed, so apply them now (or press Sync in Argo CD):
+
+```
+kubectl apply -f Backend/Flask/flask-servicemonitor.yml -f Backend/Auth/auth-servicemonitor.yml
+```
+
 Port-forwards, each in a separate window:
 
 ```
@@ -136,14 +142,20 @@ curl.exe -i http://localhost:8080/api/auth/me
 
 The tables are `cloud_prices`, `saved_files`, `sessions`, `users`. The `curl` answers `401` (not logged in).
 
+## Monitoring
+
+Prometheus reads `/metrics` of the Flask and auth services through one ServiceMonitor each; the NetworkPolicy `allow-from-prometheus` lets it in. Check Status, Targets in Prometheus: 3 targets, all UP.
+
+Two Grafana dashboards are in `Monitoring/Grafana/` (`k8s-infrastructure.json`, `application.json`). In Grafana: Dashboards, New, Import, upload the file. Grafana has no volume, so import them again after a Grafana pod restart. Argo CD does not apply this folder.
+
 ## Notes
 
 - The database password must be the same in both `db-secret` Secrets (letters and digits, at least one letter).
 - If the Ingress controller stays `Pending`: `kubectl taint nodes minikube node-role.kubernetes.io/control-plane:NoSchedule-`
 - Stop and start later (keeps the data): `minikube stop`, `minikube start`, then the port-forwards.
-- Jenkins: the credentials `dockerhub` and `github-infra` and the pipeline job are set in the Jenkins UI. The pipeline is the `Jenkinsfile` in the app repo.
-- Deleting the Argo CD Application also deletes everything it deployed, including the database PVC.
+- Jenkins: the credentials `dockerhub` and `github-infra` and the pipeline job are set in the Jenkins UI. The pipeline is the `Jenkinsfile` in the app repo: it builds only the services whose folders changed and tests them in parallel.
+- Deleting the Argo CD Application leaves everything it deployed running, including the database PVC. To remove the app, delete its namespaces.
 
 ## Planned
 
-Application metrics (`/metrics` and ServiceMonitors), then AWS with HTTPS and Google sign-in.
+Security end to end, then AWS with HTTPS and Google sign-in.
