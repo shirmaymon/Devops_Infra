@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: vmcalc-apache
-          image: shirmaymon/devops-front:ca81370
+          image: shirmaymon/devops-front:93f6176
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
