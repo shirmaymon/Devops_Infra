@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: vmcalc-flask
-          image: shirmaymon/devops-backend:55b2ab7
+          image: shirmaymon/devops-backend:97268e6
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
